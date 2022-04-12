@@ -349,7 +349,7 @@ lazy val transducers = crossProject(JVMPlatform, JSPlatform)
   .settings(publishSettings)
   .settings(
     name := "fs2-data-transducers",
-    description := "Streaming transducers library"
+    description := "Streaming transducers library",
   )
 
 lazy val documentation = project
