@@ -102,4 +102,74 @@ class XmlParserBenchmarks {
         })
       .unsafeRunSync()
   }
+
+  @Benchmark
+  def aaltoEvents(): Unit = {
+    import com.fasterxml.aalto._
+    import com.fasterxml.aalto.stax._
+    import javax.xml.stream.XMLStreamConstants
+    import scala.xml._
+
+    val inputF = new InputFactoryImpl()
+    val parser = inputF.createAsyncForByteArray()
+
+    def parse(s: Stream[IO, Byte], stack: List[NodeBuffer]): Pull[IO, Node, Unit] =
+      Pull.suspend {
+        if (parser.hasNext()) {
+          parser.next match {
+            case XMLStreamConstants.START_ELEMENT =>
+              parse(s, new NodeBuffer() :: stack)
+            case XMLStreamConstants.END_ELEMENT =>
+              stack match {
+                case children :: tail =>
+                  tail.head.append(Elem(
+                    null,
+                    parser.getName.getLocalPart,
+                    Null,
+                    TopScope,
+                    false,
+                    children: _*))
+                  parse(s, tail)
+              }
+            case XMLStreamConstants.CHARACTERS =>
+              stack.head.append(Text(parser.getText()))
+              parse(s, stack)
+            case XMLStreamConstants.START_DOCUMENT =>
+              parse(s, new NodeBuffer() :: stack)
+            case XMLStreamConstants.END_DOCUMENT =>
+              stack match {
+                case children :: Nil =>
+                  Pull.output1(Elem(
+                    null,
+                    null,
+                    Null,
+                    TopScope,
+                    false,
+                    children: _*)) >>
+                  parse(s, Nil)
+              }
+            case AsyncXMLStreamReader.EVENT_INCOMPLETE =>
+              go(s, stack)
+          }
+        } else {
+          Pull.done
+        }
+      }
+
+    def go(s: Stream[IO, Byte], stack: List[NodeBuffer]): Pull[IO, Node, Unit] =
+      s.pull.uncons.flatMap {
+        case Some((hd, tl)) =>
+          Pull.eval(IO(parser.getInputFeeder.feedInput(hd.toArray, 0, hd.size))) >>
+          parse(tl, stack)
+        case None =>
+          Pull.eval(IO(parser.getInputFeeder.endOfInput())) >>
+          parse(Stream.empty, stack)
+      }
+
+    xmlStream
+      .through(s => go(s, Nil).stream)
+      .compile
+      .lastOrError
+      .unsafeRunSync()
+  }
 }

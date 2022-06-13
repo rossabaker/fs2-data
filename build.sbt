@@ -373,7 +373,8 @@ lazy val benchmarks = crossProject(JVMPlatform)
   .settings(commonSettings)
   .settings(
     libraryDependencies ++= Seq(
-      "co.fs2" %%% "fs2-io" % fs2Version
+      "co.fs2" %%% "fs2-io" % fs2Version,
+      "com.fasterxml" % "aalto-xml" % "1.3.1"
     )
   )
   .dependsOn(csv, scalaXml)
